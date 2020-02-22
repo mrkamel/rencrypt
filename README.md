@@ -9,10 +9,21 @@ if neccessary. Subsequently, the SSL certificate is pushed to a configurable
 redis server, such that rencrypt running on the other servers can fetch it from
 there.
 
+## Install
+
+First, install ruby, then:
+
+```
+git clone https://github.com/mrkamel/rencrypt
+gem install bundler
+cd rencrypt
+bundle
+```
+
 ## Usage
 
 ```
-  rencrypt generate
+  ./rencrypt generate
     --base-path=BASE_PATH
     --common-name=COMMON_NAME
     --email=EMAIL

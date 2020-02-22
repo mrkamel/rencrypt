@@ -4,3 +4,9 @@ services:
     image: redis:5.0
     ports:
       - 127.0.0.1:6379:6379
+  localstack:
+    image: localstack/localstack
+    ports:
+      - 127.0.0.1:4580:4580
+    environment:
+      - SERVICES=route53

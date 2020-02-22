@@ -1,9 +1,6 @@
 
 module Rencrypt
   class RedisStore
-    class PrivateKeyMissingError < StandardError; end
-    class CertificateMissingError < StandardError; end
-
     attr_reader :redis
 
     def initialize(redis)
@@ -12,17 +9,30 @@ module Rencrypt
 
     def write(common_name:, private_key:, certificate:)
       redis.multi do
-        redis.hset("letsencrypt", "#{common_name}/private_key", private_key)
-        redis.hset("letsencrypt", "#{common_name}/certificate", certificate)
+        redis.hset("rencrypt", "#{common_name}/private_key", private_key)
+        redis.hset("rencrypt", "#{common_name}/certificate", certificate)
       end
     end
 
-    def read_private_key(common_name)
-      redis.hget("letsencrypt", "#{common_name}/private_key") || raise(PrivateKeyMissingError)
+    def read(common_name)
+      private_key = redis.hget("rencrypt", "#{common_name}/private_key")
+      certificate = redis.hget("rencrypt", "#{common_name}/certificate")
+
+      return if !private_key || !certificate
+
+      { private_key: private_key, certificate: certificate }
     end
 
-    def read_certificate(common_name)
-      redis.hget("letsencrypt", "#{common_name}/certificate") || raise(CertificateMissingError)
+    def with_lock(common_name, ttl:)
+      key = "rencrypt:lock:#{common_name}"
+
+      if redis.set(key, 1, nx: true, ex: ttl)
+        begin
+          yield
+        ensure
+          redis.del(key)
+        end
+      end
     end
   end
 end

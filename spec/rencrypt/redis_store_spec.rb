@@ -2,45 +2,64 @@
 require File.expand_path("../spec_helper", __dir__)
 require "redis"
 
-RSpec.describe Rencrypt::RedisStore do
-  subject { described_class.new(redis) }
+module Rencrypt
+  RSpec.describe RedisStore do
+    subject { described_class.new(redis) }
 
-  let(:redis) { Redis.new }
+    let(:redis) { Redis.new }
 
-  after { redis.flushdb }
+    after { redis.flushdb }
 
-  describe "#write" do
-    it "writes the private key and certficate at the correct keys" do
-      subject.write(common_name: "example.com", private_key: "some private key", certificate: "some certificate")
+    describe "#write" do
+      it "writes the private key and certficate at the correct keys" do
+        subject.write(common_name: "example.com", private_key: "some private key", certificate: "some certificate")
 
-      expect(redis.hgetall("letsencrypt")).to eq({
-        "example.com/private_key" => "some private key",
-        "example.com/certificate" => "some certificate"
-      })
-    end
-  end
-
-  describe "#read_private_key" do
-    it "returns the private key" do
-      subject.write(common_name: "example.com", private_key: "some private key", certificate: "some certificate")
-
-      expect(subject.read_private_key("example.com")).to eq("some private key")
+        expect(redis.hgetall("rencrypt")).to eq({
+          "example.com/private_key" => "some private key",
+          "example.com/certificate" => "some certificate"
+        })
+      end
     end
 
-    it "raises if the private key is missing" do
-      expect { subject.read_private_key("example.com") }.to raise_error(described_class::PrivateKeyMissingError)
+    describe "#read" do
+      it "returns the private key and certificate" do
+        subject.write(common_name: "example.com", private_key: "some private key", certificate: "some certificate")
+
+        expect(subject.read("example.com")).to eq({
+          private_key: "some private key",
+          certificate: "some certificate"
+        })
+      end
+
+      it "returns nil if private key or certificate is missing" do
+        expect(subject.read("example.com")).to be_nil
+      end
     end
-  end
 
-  describe "#read_certificate" do
-    it "returns the certificate" do
-      subject.write(common_name: "example.com", private_key: "some private key", certificate: "some certificate")
+    describe "#with_lock" do
+      it "acquires the lock and yields" do
+        subject.with_lock("example.com", ttl: 10) do
+          expect(redis.get("rencrypt:lock:example.com")).to eq("1")
+        end
+      end
 
-      expect(subject.read_certificate("example.com")).to eq("some certificate")
-    end
+      it "removes the lock afterwards" do
+        subject.with_lock("example.com", ttl: 10) do
+          # nothing
+        end
 
-    it "raises if the certifiate is missing" do
-      expect { subject.read_certificate("example.com") }.to raise_error(described_class::CertificateMissingError)
+        expect(redis.get("rencrypt:lock:example.com")).to be_nil
+      end
+
+      it "sets expiry on the key" do
+        allow(redis).to receive(:set)
+
+        subject.with_lock("example.com", ttl: 10) do
+          # nothing
+        end
+
+        expect(redis).to have_received(:set).with("rencrypt:lock:example.com", 1, nx: true, ex: 10)
+      end
     end
   end
 end

@@ -1,10 +1,12 @@
 
 require "openssl"
 require "acme-client"
-require "socket"
 require "logger"
 require "fileutils"
 require "memoist"
+
+require "rencrypt/http_solver"
+require "rencrypt/dns_solver"
 
 module Rencrypt
   class Certificate
@@ -21,8 +23,12 @@ module Rencrypt
       @logger = logger
     end
 
-    def update
-      with_scripts { update! }
+    def update_dns(aws_settings)
+      with_scripts { update_dns!(aws_settings) }
+    end
+
+    def update_http
+      with_scripts { update_http! }
     end
 
     def exists?
@@ -79,25 +85,63 @@ module Rencrypt
       end
     end
 
-    def update!
-      order = acme_client.new_order(identifiers: [common_name])
-      http_challenge = order.authorizations.first.http
+    def update_http!
+      order = new_order
+      challenge = order.authorizations.first.http
 
-      thread = serve(
-        path: http_challenge.filename,
-        content_type: http_challenge.content_type,
-        file_content: http_challenge.file_content
+      solver = HttpSolver.new(
+        path: challenge.filename,
+        content_type: challenge.content_type,
+        file_content: challenge.file_content,
+        logger: logger
       )
 
-      http_challenge.request_validation
+      solver.solve
 
-      while http_challenge.status == "pending"
+      begin
+        checkout(challenge, order)
+      ensure
+        solver.cleanup
+      end
+    end
+
+    def update_dns!(aws_region:, aws_access_key:, aws_secret_key:)
+      order = new_order
+      challenge = order.authorizations.first.dns
+
+      solver = DnsSolver.new(
+        aws_region: aws_region,
+        aws_access_key: aws_access_key,
+        aws_secret_key: aws_secret_key,
+        record_name: challenge.record_name,
+        record_type: challenge.record_type,
+        record_content: challenge.record_content,
+        logger: logger
+      )
+
+      solver.solve
+
+      begin
+        checkout(challenge, order)
+      ensure
+        solver.cleanup
+      end
+    end
+
+    def new_order
+      acme_client.new_order(identifiers: [common_name])
+    end
+
+    def checkout(challenge, order)
+      challenge.request_validation
+
+      while challenge.status == "pending"
         sleep 1
 
-        http_challenge.reload
+        challenge.reload
       end
 
-      raise("Challenge can't be solved") if http_challenge.status != "valid"
+      raise("Challenge can't be solved") if challenge.status != "valid"
 
       logger.info "challenge solved"
 
@@ -106,50 +150,12 @@ module Rencrypt
       while order.status == "processing"
         sleep 1
 
-        http_challenge.reload
+        challenge.reload
       end
 
       logger.info "order fulfilled"
 
       write(private_key: private_key, certificate: order.certificate)
-
-      thread.kill
-    end
-
-    def serve(path:, content_type:, file_content:)
-      Thread.new do
-        begin
-          logger.info "starting server"
-
-          server = TCPServer.new(80)
-
-          loop do
-            client = server.accept
-
-            logger.info "new connection"
-
-            line = client.gets.strip
-
-            loop { break if client.gets.strip.empty? }
-
-            if line.include?(path)
-              client.puts "HTTP/1.1 200 OK"
-              client.puts "Content-Type: #{content_type}"
-              client.puts
-              client.puts file_content
-            else
-              client.puts "HTTP/1.1 404 Not Found"
-              client.puts
-            end
-
-            logger.info "response served"
-
-            client.close
-          end
-        rescue => e
-          logger.error(e)
-        end
-      end
     end
 
     memoize def acme_client

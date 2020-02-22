@@ -16,35 +16,23 @@ module Rencrypt
       true
     end
 
-    desc "generate", "generate or update a certificate"
+    desc "http", "generate or update a certificate using the HTTP challenge"
 
     option :common_name, required: true
     option :server_name, required: true
     option :base_path, required: true
     option :email, required: true
     option :floating_ip, required: true
-    option :hcloud_token, required: true
     option :redis_url, required: true
+    option :hcloud_token, required: true
     option :before_script
     option :after_script
 
-    def generate
-      redis_store = Rencrypt::RedisStore.new(Redis.new(url: options[:redis_url]).tap(&:ping))
-      logger = Logger.new(STDOUT)
-
-      certificate = Rencrypt::Certificate.new(
-        base_path: options[:base_path],
-        common_name: options[:common_name],
-        email: options[:email],
-        before_script: options[:before_script],
-        after_script: options[:after_script],
-        logger: logger
-      )
-
+    def http
       floating_ip = Rencrypt::FloatingIp.new(token: options[:hcloud_token], ip: options[:floating_ip])
 
       if floating_ip.server_name == options[:server_name]
-        certificate.update if !certificate.exists? || certificate.not_after - Time.now < 30 * 24 * 60 * 60
+        certificate.update_http if !certificate.exists? || certificate.not_after < expiry_timestamp
 
         logger.info "writing certificate to redis"
 
@@ -56,11 +44,94 @@ module Rencrypt
       else
         logger.info "reading certificate from redis"
 
-        certificate.write(
-          private_key: redis_store.read_private_key,
-          certificate: redis_store.read_certificate
-        )
+        if credentials = redis_store.read
+          certificate.write(
+            private_key: credentials[:private_key],
+            certificate: credentials[:certificate]
+          )
+        else
+          raise "Certificate not found in redis"
+        end
       end
+    end
+
+    desc "dns", "generate or update a certificate using the DNS challenge"
+
+    option :common_name, required: true
+    option :server_name, required: true
+    option :base_path, required: true
+    option :email, required: true
+    option :redis_url, required: true
+    option :aws_region, required: true
+    option :aws_access_key, required: true
+    option :aws_secret_key, required: true
+    option :before_script
+    option :after_script
+
+    def dns
+      certificate = Rencrypt::Certificate.new(
+        base_path: options[:base_path],
+        common_name: options[:common_name],
+        email: options[:email],
+        before_script: options[:before_script],
+        after_script: options[:after_script],
+        logger: logger
+      )
+
+      logger.info "acquiring lock"
+
+      redis_store.with_lock(options[:common_name], ttl: 300) do
+        if credentials = redis_store.read
+          certificate.write(
+            private_key: credentials[:private_key],
+            certificate: credentials[:certificate]
+          )
+        end
+
+        if !certificate.exists || certificate.not_after < expiry_timestamp
+          certificate.update_dns(
+            aws_region: options[:aws_region],
+            aws_access_key: options[:aws_access_key],
+            aws_secret_key: options[:aws_secret_key]
+          )
+
+          redis_store.write(
+            common_name: certificate.common_name,
+            private_key: certificate.read_private_key,
+            certificate: certificate.read_certificate
+          )
+        else
+          certificate.write(
+            private_key: redis_store.read_private_key,
+            certificate: redis_store.read_certificate
+          )
+        end
+      end
+    end
+
+    private
+
+    def expiry_timestamp
+      Time.now + 30 * 24 * 60 * 60
+    end
+
+    def redis_store
+      @redis_store ||= Rencrypt::RedisStore.new(Redis.new(url: options[:redis_url]).tap(&:ping))
+    end
+
+    def logger
+      @logger ||= Logger.new(STDOUT)
+    end
+
+    def certificate
+      @certificate ||= Rencrypt::Certificate.new(
+        base_path: options[:base_path],
+        common_name: options[:common_name],
+        email: options[:email],
+        before_script: options[:before_script],
+        after_script: options[:after_script],
+        logger: logger
+      )
     end
   end
 end

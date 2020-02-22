@@ -27,24 +27,33 @@ bundle
 
 ```
   rencrypt http
-    --base-path=BASE_PATH
     --common-name=COMMON_NAME
+    --server-name=SERVER_NAME
+    --base-path=BASE_PATH
     --email=EMAIL
     --floating-ip=FLOATING_IP
-    --hcloud-token=HCLOUD_TOKEN
     --redis-url=REDIS_URL
-    --server-name=SERVER_NAME
+    [--hcloud-token=HCLOUD_TOKEN]
+    [--before-script=BEFORE_SCRIPT]
+    [--after-script=AFTER_SCRIPT]
 ```
+
+You can pass either `--hcloud-token` or `HCLOUD_TOKEN`
 
 ## Usage (DNS challlenge)
 
 ```
   rencrypt dns
-    --aws-region=AWS_REGION
-    --aws-access-key=AWS_ACCESS_KEY
-    --aws-secret-key=AWS_SECRET_KEY
-    --base-path=BASE_PATH
     --common-name=COMMON_NAME
+    --base-path=BASE_PATH
     --email=EMAIL
     --redis-url=REDIS_URL
+    [--aws-region=AWS_REGION]
+    [--aws-access-key=AWS_ACCESS_KEY]
+    [--aws-secret-key=AWS_SECRET_KEY]
+    [--before-script=BEFORE_SCRIPT]
+    [--after-script=AFTER_SCRIPT]
 ```
+
+You can pass either `--aws-region`, `--aws-access-key` and `--aws-secret-key`
+or `AWS_REGION`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`

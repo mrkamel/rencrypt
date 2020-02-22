@@ -45,7 +45,7 @@ module Rencrypt
 
         expect(resource_record_set.name).to eq("_acme-challenge.common_name.test.host")
         expect(resource_record_set.ttl).to eq(60)
-        expect(resource_record_set.resource_records.first.value).to eq("token")
+        expect(resource_record_set.resource_records.first.value).to eq("\"token\"")
       end
     end
 

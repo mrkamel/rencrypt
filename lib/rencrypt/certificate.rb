@@ -36,9 +36,9 @@ module Rencrypt
     end
 
     def write(private_key:, certificate:)
-      open(private_key_path, "w") { |stream| stream.write private_key }
-      open(certificate_path, "w") { |stream| stream.write certificate }
-      open(full_path, "w") { |stream| stream.write [certificate, private_key].join("\n") }
+      write_file(private_key_path, private_key)
+      write_file(certificate_path, certificate)
+      write_file(full_path, [certificate, private_key].join("\n"))
     end
 
     def not_after
@@ -113,6 +113,7 @@ module Rencrypt
         aws_region: aws_region,
         aws_access_key: aws_access_key,
         aws_secret_key: aws_secret_key,
+        common_name: common_name,
         record_name: challenge.record_name,
         record_type: challenge.record_type,
         record_content: challenge.record_content,
@@ -159,7 +160,7 @@ module Rencrypt
     end
 
     memoize def acme_client
-      Acme::Client.new(private_key: user_key, directory: "https://acme-v02.api.letsencrypt.org/directory").tap do |client|
+      Acme::Client.new(private_key: user_key, directory: "https://acme-staging-v02.api.letsencrypt.org/directory").tap do |client|
         client.new_account(contact: "mailto:#{email}", terms_of_service_agreed: true)
       end
     end
@@ -181,9 +182,14 @@ module Rencrypt
         OpenSSL::PKey::RSA.new(File.read(path))
       else
         OpenSSL::PKey::RSA.new(2048).tap do |key|
-          open(path, "w") { |stream| stream.write(key.to_s) }
+          write_file(path, key.to_s)
         end
       end
+    end
+
+    def write_file(path, content)
+      FileUtils.mkdir_p(File.dirname(path))
+      File.write(path, content)
     end
   end
 end

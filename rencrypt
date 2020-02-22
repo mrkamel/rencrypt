@@ -5,6 +5,7 @@ $LOAD_PATH.unshift File.expand_path("lib", __dir__)
 require "bundler/setup"
 require "logger"
 require "thor"
+require "redis"
 
 require "rencrypt/certificate"
 require "rencrypt/floating_ip"
@@ -24,12 +25,12 @@ module Rencrypt
     option :email, required: true
     option :floating_ip, required: true
     option :redis_url, required: true
-    option :hcloud_token, required: true
+    option :hcloud_token
     option :before_script
     option :after_script
 
     def http
-      floating_ip = Rencrypt::FloatingIp.new(token: options[:hcloud_token], ip: options[:floating_ip])
+      floating_ip = Rencrypt::FloatingIp.new(token: hcloud_token, ip: options[:floating_ip])
 
       if floating_ip.server_name == options[:server_name]
         certificate.update_http if !certificate.exists? || certificate.not_after < expiry_timestamp
@@ -44,7 +45,7 @@ module Rencrypt
       else
         logger.info "reading certificate from redis"
 
-        if credentials = redis_store.read
+        if credentials = redis_store.read(options[:common_name])
           certificate.write(
             private_key: credentials[:private_key],
             certificate: credentials[:certificate]
@@ -58,13 +59,12 @@ module Rencrypt
     desc "dns", "generate or update a certificate using the DNS challenge"
 
     option :common_name, required: true
-    option :server_name, required: true
     option :base_path, required: true
     option :email, required: true
     option :redis_url, required: true
-    option :aws_region, required: true
-    option :aws_access_key, required: true
-    option :aws_secret_key, required: true
+    option :aws_region
+    option :aws_access_key
+    option :aws_secret_key
     option :before_script
     option :after_script
 
@@ -81,18 +81,18 @@ module Rencrypt
       logger.info "acquiring lock"
 
       redis_store.with_lock(options[:common_name], ttl: 300) do
-        if credentials = redis_store.read
+        if credentials = redis_store.read(options[:common_name])
           certificate.write(
             private_key: credentials[:private_key],
             certificate: credentials[:certificate]
           )
         end
 
-        if !certificate.exists || certificate.not_after < expiry_timestamp
+        if !certificate.exists? || certificate.not_after < expiry_timestamp
           certificate.update_dns(
-            aws_region: options[:aws_region],
-            aws_access_key: options[:aws_access_key],
-            aws_secret_key: options[:aws_secret_key]
+            aws_region: aws_region,
+            aws_access_key: aws_access_key,
+            aws_secret_key: aws_secret_key
           )
 
           redis_store.write(
@@ -132,6 +132,22 @@ module Rencrypt
         after_script: options[:after_script],
         logger: logger
       )
+    end
+
+    def hcloud_token
+      ENV["HCLOUD_TOKEN"] || options[:hcloud_token] || raise("please specify --hcloud-token or HCLOUD_TOKEN")
+    end
+
+    def aws_region
+      ENV["AWS_REGION"] || options[:aws_region] || raise("please specify --aws-region or AWS_REGION")
+    end
+
+    def aws_access_key
+      ENV["AWS_ACCESS_KEY_ID"] || options[:aws_access_key] || raise("please specify --aws-access-key or AWS_ACCESS_KEY_ID")
+    end
+
+    def aws_secret_key
+      ENV["AWS_SECRET_ACCESS_KEY"] || options[:aws_secret_key] || raise("please specify --aws-secret-key or AWS_SECRET_ACCESS_KEY")
     end
   end
 end

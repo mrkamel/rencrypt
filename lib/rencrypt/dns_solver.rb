@@ -6,7 +6,7 @@ module Rencrypt
   class DnsSolver
     attr_reader :aws_endpoint, :aws_region, :aws_access_key, :aws_secret_key, :common_name, :record_name, :record_type, :record_content, :logger
 
-    def initialize(aws_endpoint:, aws_region:, aws_access_key:, aws_secret_key:, common_name:, record_name:, record_type:, record_content:, logger: Logger.new("/dev/null"))
+    def initialize(aws_endpoint: nil, aws_region:, aws_access_key:, aws_secret_key:, common_name:, record_name:, record_type:, record_content:, logger: Logger.new("/dev/null"))
       @aws_endpoint = aws_endpoint
       @aws_region = aws_region
       @aws_access_key = aws_access_key
@@ -28,7 +28,7 @@ module Rencrypt
               name: full_record_name,
               type: record_type,
               resource_records: [
-                value: record_content
+                value: "\"#{record_content}\""
               ],
               ttl: 60
             }
@@ -47,7 +47,7 @@ module Rencrypt
               name: full_record_name,
               type: record_type,
               resource_records: [
-                value: record_content
+                value: "\"#{record_content}\""
               ],
               ttl: 60
             }
@@ -100,10 +100,12 @@ module Rencrypt
 
     def route53
       @route53 ||= Aws::Route53::Client.new(
-        endpoint: aws_endpoint,
-        region: aws_region,
-        access_key_id: aws_access_key,
-        secret_access_key: aws_secret_key
+        {
+          endpoint: aws_endpoint,
+          region: aws_region,
+          access_key_id: aws_access_key,
+          secret_access_key: aws_secret_key
+        }.compact
       )
     end
   end

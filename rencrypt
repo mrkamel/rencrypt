@@ -1,0 +1,64 @@
+#!/usr/bin/env ruby
+
+$LOAD_PAth.unshift File.expand_path("lib", __dir__)
+
+require "bundler/setup"
+require "logger"
+require "thor"
+
+require "rencrypt/certificate"
+require "renencrypt/floating_ip"
+require "renencrypt/redis_store"
+
+module Rencrypt
+  class Cli < Thor
+    def self.exit_on_failure?
+      true
+    end
+
+    desc "generate", "generate or update a certificate"
+
+    option :common_name, required: true
+    option :server_name, required: true
+    option :base_path, required: true
+    option :email, required: true
+    option :floating_ip, required: true
+    option :hcloud_token, required: true
+    option :redis_url, required: true
+    option :before_script
+    option :after_script
+
+    def generate
+      redis_store = Renencrypt::RedisStore.new(Redis.new(url: options[:redis_url]).tap(&:ping))
+      logger = Logger.new(STDOUT)
+
+      certificate = Renencrypt::Certificate.new(
+        base_path: options[:base_path],
+        common_name: options[:common_name],
+        email: options[:email],
+        before_script: options[:before_script],
+        after_script: options[:after_script],
+        logger: logger
+      )
+
+      floating_ip = Renencrypt::FloatingIp.new(token: options[:hcloud_token], ip: options[:floating_ip])
+
+      if floating_ip.server_name == options[:server_name]
+        certificate.update if !certificate.exists? || certificate.not_after - Time.now < 30 * 24 * 60 * 60
+
+        redis_store.write(
+          common_name: certificate.common_name,
+          private_key: certificate.read_private_key,
+          certificate: certificate.read_certificate
+        )
+      else
+        certificate.write(
+          private_key: redis_store.read_private_key,
+          certificate: redis_store.read_certificate
+        )
+      end
+    end
+  end
+end
+
+Renencrypt::Cli.start(ARGV)

@@ -46,12 +46,16 @@ module Rencrypt
       if floating_ip.server_name == options[:server_name]
         certificate.update if !certificate.exists? || certificate.not_after - Time.now < 30 * 24 * 60 * 60
 
+        logger.info "writing certificate to redis"
+
         redis_store.write(
           common_name: certificate.common_name,
           private_key: certificate.read_private_key,
           certificate: certificate.read_certificate
         )
       else
+        logger.info "reading certificate from redis"
+
         certificate.write(
           private_key: redis_store.read_private_key,
           certificate: redis_store.read_certificate

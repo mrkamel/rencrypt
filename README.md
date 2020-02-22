@@ -38,7 +38,7 @@ bundle
     [--after-script=AFTER_SCRIPT]
 ```
 
-You can pass either `--hcloud-token` or `HCLOUD_TOKEN`
+You can pass either `--hcloud-token` or via `HCLOUD_TOKEN` environment variable
 
 ## Usage (DNS challlenge)
 
@@ -56,4 +56,5 @@ You can pass either `--hcloud-token` or `HCLOUD_TOKEN`
 ```
 
 You can pass either `--aws-region`, `--aws-access-key` and `--aws-secret-key`
-or `AWS_REGION`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+or via `AWS_REGION`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+environment variables

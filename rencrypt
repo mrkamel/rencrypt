@@ -100,11 +100,6 @@ module Rencrypt
             private_key: certificate.read_private_key,
             certificate: certificate.read_certificate
           )
-        else
-          certificate.write(
-            private_key: redis_store.read_private_key,
-            certificate: redis_store.read_certificate
-          )
         end
       end
     end

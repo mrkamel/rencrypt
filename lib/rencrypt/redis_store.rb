@@ -23,15 +23,19 @@ module Rencrypt
       { private_key: private_key, certificate: certificate }
     end
 
-    def with_lock(common_name, ttl:)
+    def with_lock(common_name, ttl:, timeout: 300)
       key = "rencrypt:lock:#{common_name}"
 
-      if redis.set(key, 1, nx: true, ex: ttl)
-        begin
-          yield
-        ensure
-          redis.del(key)
+      timeout.times do
+        if redis.set(key, 1, nx: true, ex: ttl)
+          begin
+            return yield
+          ensure
+            redis.del(key)
+          end
         end
+
+        sleep 1
       end
     end
   end

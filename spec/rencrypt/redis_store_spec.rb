@@ -52,7 +52,7 @@ module Rencrypt
       end
 
       it "sets expiry on the key" do
-        allow(redis).to receive(:set)
+        allow(redis).to receive(:set).and_return(true)
 
         subject.with_lock("example.com", ttl: 10) do
           # nothing

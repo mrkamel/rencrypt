@@ -36,9 +36,15 @@ module Rencrypt
     end
 
     def write(private_key:, certificate:)
-      write_file(private_key_path, private_key)
-      write_file(certificate_path, certificate)
-      write_file(full_path, [certificate, private_key].join("\n"))
+      return if read_private_key == private_key && read_certificate == certificate
+
+      run_before_script
+
+      begin
+        write_without_scripts(private_key: private_key, certificate: certificate)
+      ensure
+        run_after_script
+      end
     end
 
     def not_after
@@ -46,10 +52,14 @@ module Rencrypt
     end
 
     def read_private_key
+      return unless File.exists?(private_key_path)
+
       File.read(private_key_path)
     end
 
     def read_certificate
+      return unless File.exists?(certificate_path)
+
       File.read(certificate_path)
     end
 
@@ -67,21 +77,35 @@ module Rencrypt
       File.join(base_path, common_name, "full.pem")
     end
 
-    def with_scripts
+    def write_without_scripts(private_key:, certificate:)
+      write_file(private_key_path, private_key)
+      write_file(certificate_path, certificate)
+      write_file(full_path, [certificate, private_key].join("\n"))
+    end
+
+    def run_before_script
       if before_script
         logger.info "executing #{before_script}"
 
         `#{before_script}`
       end
+    end
+
+    def run_after_script
+      if after_script
+        logger.info "executing #{after_script}"
+
+        `#{after_script}`
+      end
+    end
+
+    def with_scripts
+      run_before_script
 
       begin
         yield
       ensure
-        if after_script
-          logger.info "executing #{after_script}"
-
-          `#{after_script}`
-        end
+        run_after_script
       end
     end
 
@@ -156,7 +180,7 @@ module Rencrypt
 
       logger.info "order fulfilled"
 
-      write(private_key: private_key, certificate: order.certificate)
+      write_without_scripts(private_key: private_key, certificate: order.certificate)
     end
 
     memoize def acme_client

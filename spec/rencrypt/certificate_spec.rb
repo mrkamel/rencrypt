@@ -85,38 +85,32 @@ module Rencrypt
 
         it "runs the before script" do
           call
-
           expect(File.exists?("/tmp/before_script")).to eq(true)
         end
 
         it "runs the after script" do
           call
-
           expect(File.exists?("/tmp/after_script")).to eq(true)
         end
       end
 
       it "requests the http challenge" do
         call
-
         expect(http_challenge).to have_received(:request_validation)
       end
 
       it "answers the http challenge" do
         call
-
         expect(http_solver).to have_received(:solve)
       end
 
       it "obtains and writes the certificate" do
         call
-
         expect(File.read(certificate_path)).to eq("certificate")
       end
 
       it "cleans up the http challenge" do
         call
-
         expect(http_solver).to have_received(:cleanup)
       end
     end
@@ -135,38 +129,32 @@ module Rencrypt
 
         it "runs the before script" do
           call
-
           expect(File.exists?("/tmp/before_script")).to eq(true)
         end
 
         it "runs the after script" do
           call
-
           expect(File.exists?("/tmp/after_script")).to eq(true)
         end
       end
 
       it "requests the dns challenge" do
         call
-
         expect(dns_challenge).to have_received(:request_validation)
       end
 
       it "answers the dns challenge" do
         call
-
         expect(dns_solver).to have_received(:solve)
       end
 
       it "obtains and writes the certificate" do
         call
-
         expect(File.read(certificate_path)).to eq("certificate")
       end
 
       it "cleans up the dns challenge" do
         call
-
         expect(dns_solver).to have_received(:cleanup)
       end
     end
@@ -184,17 +172,76 @@ module Rencrypt
     end
 
     describe "#write" do
-      before { subject.write(private_key: "private key", certificate: "certificate") }
+      let(:call) { subject.write(private_key: "private key", certificate: "certificate") }
+
+      let(:before_script) { "touch /tmp/before_script" }
+      let(:after_script) { "touch /tmp/after_script" }
+
+      after do
+        FileUtils.rm_f "/tmp/before_script"
+        FileUtils.rm_f "/tmp/after_script"
+      end
+
+      context "with existing private key and certificate" do
+        before { subject.write(private_key: "old private key", certificate: "old certificate") }
+
+        it "update the private key" do
+          call
+          expect(File.read(private_key_path)).to eq("private key")
+        end
+
+        it "updates the certificate" do
+          call
+          expect(File.read(certificate_path)).to eq("certificate")
+        end
+
+        it "updates the full file" do
+          call
+          expect(File.read(full_path)).to eq("certificate\nprivate key")
+        end
+      end
+
+      context "with existing and matching private key and certificate" do
+        before do
+          subject.write(private_key: "private key", certificate: "certificate")
+
+          FileUtils.rm_f "/tmp/before_script"
+          FileUtils.rm_f "/tmp/after_script"
+        end
+
+        it "does not run the before script" do
+          call
+          expect(File.exists?("/tmp/before_script")).to eq(false)
+        end
+
+        it "does not run the after script" do
+          call
+          expect(File.exists?("/tmp/after_script")).to eq(false)
+        end
+      end
+
+      it "runs the before script" do
+        call
+        expect(File.exists?("/tmp/before_script")).to eq(true)
+      end
+
+      it "runs the after script" do
+        call
+        expect(File.exists?("/tmp/after_script")).to eq(true)
+      end
 
       it "writes the private key" do
+        call
         expect(File.read(private_key_path)).to eq("private key")
       end
 
       it "writes the certificate" do
+        call
         expect(File.read(certificate_path)).to eq("certificate")
       end
 
       it "writes the full file" do
+        call
         expect(File.read(full_path)).to eq("certificate\nprivate key")
       end
     end

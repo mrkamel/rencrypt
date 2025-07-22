@@ -55,7 +55,7 @@ GEM
       diff-lcs (>= 1.2.0, < 2.0)
       rspec-support (~> 3.9.0)
     rspec-support (3.9.2)
-    thor (1.0.1)
+    thor (1.4.0)
     unf (0.1.4)
       unf_ext
     unf_ext (0.0.7.6)
